@@ -1,0 +1,162 @@
+Test Plan - Zero Generation Alerts
+
+Testing needs:
+- At least one test system / emulator to be monitored 
+    - this system should be configurable to produce different alerts on demand
+    - it should be possible to put the system in a normal/alert-free status at any time, so that it is reporting non-zero energy being generated
+    - other projects should not have dependencies on this test system's status, as it may be configured to generate different alerts at any time
+- A way to test daily alert notifications at a quicker pace
+    - The interval for alert notifications could be configurable, e.g., an open alert could prompt an email notification to be sent to the user every MINUTE until the alert is acknowledged
+    - The system time could be manipulated during a test, so that the daily alerts are triggered at will
+- A way to configure the test system's alerts as coming from different geographical locations (for testing the 'sunset'/'sunrise' parameters, which vary according to location)
+- SMTP server for sending test emails
+- Generic test email account 
+    - this account's mailbox should be accessible by automated test scripts, running unattended
+    - this generic user should be excluded from companywide emails and should receive only test alerts
+    - automated acknowledgment of alerts should be possible (e.g., by opening an email and parsing out an acknowledgment link) 
+
+Test strategy
+- Test cases should:
+    - Verify one expected behavior per test case (if possible given performance/time constraints) 
+    - Log state changes and helpful information as the test steps leading up to the verification point execute (a debug flag can be used to switch this on and off if needed)
+    - Be able to start successfully on an accessible test system in any alert state (the test should contain setup steps to put the system in the desired starting state)
+    - Set the test system back to a consistent known state at the conclusion of the test
+
+- Logging:
+    - Record build version, timestamp, and pass/fail metrics for each run of tests
+    - Generate on-demand reports summarizing past test runs
+
+
+Test scenario summaries
+
+- Test setup - all test cases should begin with these steps:
+    - If possible, verify that the test system is accessible and free of atypical environmental issues 
+    - The test system should be placed into a consistent, known state before test steps are executed
+    - The test email inbox should be emptied, or its current state should be captured before new notifications are triggered
+
+Notes: 
+    - The interval between alerts is referred to here as a day, but that may change depending on how we increase the speed of our tests; see "Testing needs" above
+    - For testing the alert lifecycle, we should test state changes occurring all on the same day, or on different days, and include cases where a day goes by without any change in state
+
+
+---------------------
+Alert Lifecycle tests
+
+
+Happy path, single alert:
+
+  - Test begins with system having no previous alerts recorded
+
+  - Test alert state changes from no alert to 'Open', 'Open' to 'Acknowledged', 'Open' to 'Closed', or 'Acknowledged' to 'Closed'
+  
+  - Vary the timeframes on changes - 'Open' to 'Acknowledged' to 'Closed' in one day / all on consecutive days / on different days with in-between days where the state stays the same
+
+  - Test alert staying in the same state for multiple days
+
+
+Happy path, new alerts on a system that has generated previous alerts:
+
+  - Test begins with system having at least one previous, now 'Closed' alert recorded
+
+  - If the system's most recent alert state is 'Closed', and zero generation is detected, a new 'Open' alert should be created
+
+  - Behavior of new alert should be identical to "Happy path, single alert" behavior noted above; previous alert should not affect anything
+
+  - Test all of this happening on the same day, or over the course of multiple days
+
+
+Acknowledgments that have no effect:
+
+  - Test what happens to the alert state when a user acknowledges an alert multiple times, from the same or different notifications
+
+  - Only the first acknowledgment should have an effect on the alert state
+
+  - Test what happens when an alert state changes from 'Open' to 'Closed' (never having been acknowledged), and a user sends an acknowledgment after the alert has already been closed (expect that the state stays unchanged at 'Closed')
+
+
+---------------------
+Notification tests
+
+
+Happy path, single alert:
+
+  - Test begins with system having no previous alerts recorded
+
+  - Once an alert state changes to 'Open', daily emails are sent until the user acknowledges one, or until the system reports non-zero generation
+
+  - Whether a user acknowledges an alert by the first email they receive, or any one of a series of daily emails, a single acknowledgment causes the state to change to 'Acknowledged', and no more 'Open' alert emails will be received on that alert
+
+  - When the alert state changes to 'Closed' from either 'Open' or 'Acknowledged', then the user receives a notification that the alert has been 'Closed', and they do not receive any further notifications on that alert
+
+  - Test acknowledgments made on the same day as the first alert, and also after multiple notifications have been received
+
+
+Happy path, new alerts:
+
+  - Test begins with system having a previous, now 'Closed' alert recorded
+
+  - When the alert state on a system changes from 'Closed' to 'Open', behavior of notifications and acknowledgments should be the same as described above under "Happy path, single alert"; whether or not a now 'Closed' alert was previously acknowledged should have no effect on behavior of current notifications
+
+
+Multiple/expired acknowledgments:
+
+  - Test what happens when a user attempts to acknowledge the same alert multiple times via a single notification, or multiple times via different notifications (expect that only the first acknowledgment will have any effect) 
+
+  - Test what happens when the alert state on a system changes from 'Open' to 'Closed' (never having been 'Acknowledged'), and a user attempts to acknowledge the alert after it's closed (expect that they are not able to acknowledge a closed alert)
+
+
+Other scenarios for Alert and Notification tests:
+
+  - Special date ranges - last day of a month to the first day of the next month; December 31 to January 1; leap year behavior
+
+  - Atypical environmental failures - e.g., network / power / mail server outages - is any unexpected behavior triggered when service/connectivity is restored? 
+
+  - If a single user receives alerts from multiple systems at once, test to ensure that their acknowledgments of different alerts are kept distinct
+
+
+
+---------------------
+Bonus tests
+
+Test cases:
+
+Basic feature test:
+
+  - If, at sunset, a system is in an alert-free state, or the most recent alert state is 'Closed', and zero generation is detected between sunset and sunrise, then no new zero generation alert is created between sunset and sunrise
+
+
+Alert state remains the same overnight:
+
+  - If the alert state is 'Open' at sunset, and the alert is not acknowledged between sunset and sunrise, and no non-zero generation is detected between sunset and sunrise, then the alert remains 'Open' after sunrise
+
+  - If the alert state is 'Acknowledged' at sunset, and no non-zero generation is detected between sunset and sunrise, then the alert remains 'Acknowledged' after sunrise
+
+  - If the alert state is 'Closed' at sunset, then the alert remains 'Closed' after sunrise
+
+
+Alert state changes overnight (*these test cases subject to change based on feature requirements, see questions):
+
+  - If the alert state is 'Open' at sunset, and the alert is acknowledged between sunset and sunrise, then the alert state should change to 'Acknowledged'
+
+  - If the alert state is 'Open' or 'Acknowledged' at sunset, and non-zero generation is detected between sunset and sunrise, then the alert state changes to 'Closed', and a 'Closed' notification email is sent
+
+
+Notification tests
+
+*Note: assume the 'Open' alert notification window is a day (24 hours)
+
+  - If the alert state changes to 'Open' at 2pm on day 1, and the state is still 'Open' at 2pm on day 2, then 'Open' alert email notifications are sent at 2pm on day 1 and 2pm on day 2 (no additional notification should be triggered at sunrise)
+
+  - If the alert state changes to 'Open' at 2pm on day 1, and the alert is acknowledged between 2pm and sunset on day 1, then a single 'Open' alert notification is sent at 2pm on day 1 
+
+  - If the alert state changes to 'Open' at 2pm on day 1, and the alert is acknowledged between sunrise and 2pm on day 2, then a single 'Open' alert notification is sent at 2pm on day 1 
+
+  - If the alert state is 'Open' or 'Acknowledged' at sunset, and it changes to 'Closed' between sunset and sunrise, then a 'Closed' notification email is sent 
+
+  - Suppose sunset is at 5:01pm on day 1, and 4:57pm on day 2. If the alert state changes to 'Open' at 5pm on day 1, and it is still 'Open' at 5pm on day 2, then 'Open' alert notifications are sent at 5pm on day 1 and 5pm on day 2
+
+  - Suppose sunrise is at 5:59am on day 1, and 6:03am on day 2. If the alert state changes to 'Open' at 6am on day 1, and it is still 'Open' at 6am on day 2, then 'Open' alert notifications are sent at 6am on day 1 and 6am on day 2
+
+  - If the alert state is 'Open' or 'Acknowledged' at sunset, and it changes to 'Closed' between sunset and sunrise, then a 'Closed' notification email is sent 
+
+
